@@ -1,21 +1,21 @@
 from droid.misc.parameters import *
 
 camera_type_dict = {
-    hand_camera_id: 0,
-    varied_camera_1_id: 1,
-    varied_camera_2_id: 1,
+    hand_camera_id: 3,
+    right_camera_id: 0,
+    left_camera_id: 2,
 }
 
 camera_type_to_string_dict = {
-    0: "hand_camera",
-    1: "varied_camera",
-    2: "fixed_camera",
+    3: "hand_camera",
+    0: "right_camera",
+    2: "left_camera",
 }
 
 camera_name_dict = {
     hand_camera_id: "Hand Camera",
-    varied_camera_1_id: "Varied Camera #1",
-    varied_camera_2_id: "Varied Camera #2",
+    right_camera_id: "Right WebCamera",
+    left_camera_id: "Left WebCamera",
 }
 
 

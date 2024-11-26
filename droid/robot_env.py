@@ -3,19 +3,35 @@ from copy import deepcopy
 import gym
 import numpy as np
 
-from droid.calibration.calibration_utils import load_calibration_info
+# from droid.calibration.calibration_utils import load_calibration_info
 from droid.camera_utils.info import camera_type_dict
 from droid.camera_utils.wrappers.multi_camera_wrapper import MultiCameraWrapper
+
 from droid.misc.parameters import hand_camera_id, nuc_ip
+from droid.misc.parameters_panda import hand_camera_id_panda, nuc_ip_panda
 from droid.misc.server_interface import ServerInterface
 from droid.misc.time import time_ms
-from droid.misc.transformations import change_pose_frame
+from multiprocessing.managers import SharedMemoryManager
+
+# from droid.misc.transformations import change_pose_frame
 
 
 class RobotEnv(gym.Env):
-    def __init__(self, action_space="cartesian_velocity", gripper_action_space=None, camera_kwargs={}, do_reset=True):
+    def __init__(
+        self,
+        action_space="cartesian_velocity",
+        robot_type="fr3",
+        gripper_action_space=None,
+        camera_kwargs={},
+        do_reset=True,
+        shm_manager=None
+    ):
         # Initialize Gym Environment
         super().__init__()
+
+        # if shm_manager is None:
+        #     shm_manager = SharedMemoryManager()
+        #     shm_manager.start()
 
         # Define Action Space #
         assert action_space in ["cartesian_position", "joint_position", "cartesian_velocity", "joint_velocity"]
@@ -24,22 +40,33 @@ class RobotEnv(gym.Env):
         self.check_action_range = "velocity" in action_space
 
         # Robot Configuration
-        self.reset_joints = np.array([0, -1 / 5 * np.pi, 0, -4 / 5 * np.pi, 0, 3 / 5 * np.pi, 0.0])
+        if robot_type == "fr3":
+            self.reset_joints = np.array([0, -1 / 5 * np.pi, 0, -4 / 5 * np.pi, 0, 3 / 5 * np.pi, np.pi / 2])
+        elif robot_type == "panda":
+            self.reset_joints = np.array([0, -1 / 5 * np.pi, 0, -4 / 5 * np.pi, 0, 3 / 5 * np.pi, 0])
         self.randomize_low = np.array([-0.1, -0.2, -0.1, -0.3, -0.3, -0.3])
         self.randomize_high = np.array([0.1, 0.2, 0.1, 0.3, 0.3, 0.3])
         self.DoF = 7 if ("cartesian" in action_space) else 8
         self.control_hz = 15
 
-        if nuc_ip is None:
-            from franka.robot import FrankaRobot
-
-            self._robot = FrankaRobot()
+        if robot_type == "fr3":
+            if nuc_ip is None:
+                from franka.robot import FrankaRobot
+                self._robot = FrankaRobot()
+            else:
+                self._robot = ServerInterface(ip_address=nuc_ip)
+        elif robot_type == "panda":
+            if nuc_ip_panda is None:
+                from franka.robot import FrankaRobot
+                self._robot = FrankaRobot()
+            else:
+                self._robot = ServerInterface(ip_address=nuc_ip_panda)
         else:
-            self._robot = ServerInterface(ip_address=nuc_ip)
+            raise ValueError("Invalid robot type")
 
         # Create Cameras
         self.camera_reader = MultiCameraWrapper(camera_kwargs)
-        self.calibration_dict = load_calibration_info()
+        # self.calibration_dict = load_calibration_info()
         self.camera_type_dict = camera_type_dict
 
         # Reset Robot
@@ -74,10 +101,7 @@ class RobotEnv(gym.Env):
 
     def update_robot(self, action, action_space="cartesian_velocity", gripper_action_space=None, blocking=False):
         action_info = self._robot.update_command(
-            action,
-            action_space=action_space,
-            gripper_action_space=gripper_action_space,
-            blocking=blocking
+            action, action_space=action_space, gripper_action_space=gripper_action_space, blocking=blocking
         )
         return action_info
 
@@ -90,20 +114,20 @@ class RobotEnv(gym.Env):
     def get_state(self):
         read_start = time_ms()
         state_dict, timestamp_dict = self._robot.get_robot_state()
-        timestamp_dict["read_start"] = read_start
-        timestamp_dict["read_end"] = time_ms()
+        timestamp_dict["read_start"] = read_start   # Desktop time
+        timestamp_dict["read_end"] = time_ms()     # Desktop time
         return state_dict, timestamp_dict
 
-    def get_camera_extrinsics(self, state_dict):
-        # Adjust gripper camere by current pose
-        extrinsics = deepcopy(self.calibration_dict)
-        for cam_id in self.calibration_dict:
-            if hand_camera_id not in cam_id:
-                continue
-            gripper_pose = state_dict["cartesian_position"]
-            extrinsics[cam_id + "_gripper_offset"] = extrinsics[cam_id]
-            extrinsics[cam_id] = change_pose_frame(extrinsics[cam_id], gripper_pose)
-        return extrinsics
+    # def get_camera_extrinsics(self, state_dict):
+    #     # Adjust gripper camere by current pose
+    #     extrinsics = deepcopy(self.calibration_dict)
+    #     for cam_id in self.calibration_dict:
+    #         if hand_camera_id not in cam_id:
+    #             continue
+    #         gripper_pose = state_dict["cartesian_position"]
+    #         extrinsics[cam_id + "_gripper_offset"] = extrinsics[cam_id]
+    #         extrinsics[cam_id] = change_pose_frame(extrinsics[cam_id], gripper_pose)
+    #     return extrinsics
 
     def get_observation(self):
         obs_dict = {"timestamp": {}}
@@ -117,17 +141,16 @@ class RobotEnv(gym.Env):
         camera_obs, camera_timestamp = self.read_cameras()
         obs_dict.update(camera_obs)
         obs_dict["timestamp"]["cameras"] = camera_timestamp
+        # # Camera Info #
+        # obs_dict["camera_type"] = deepcopy(self.camera_type_dict)
+        # extrinsics = self.get_camera_extrinsics(state_dict)
+        # obs_dict["camera_extrinsics"] = extrinsics
 
-        # Camera Info #
-        obs_dict["camera_type"] = deepcopy(self.camera_type_dict)
-        extrinsics = self.get_camera_extrinsics(state_dict)
-        obs_dict["camera_extrinsics"] = extrinsics
-
-        intrinsics = {}
-        for cam in self.camera_reader.camera_dict.values():
-            cam_intr_info = cam.get_intrinsics()
-            for (full_cam_id, info) in cam_intr_info.items():
-                intrinsics[full_cam_id] = info["cameraMatrix"]
-        obs_dict["camera_intrinsics"] = intrinsics
+        # intrinsics = {}
+        # for cam in self.camera_reader.camera_dict.values():
+        #     cam_intr_info = cam.get_intrinsics()
+        #     for full_cam_id, info in cam_intr_info.items():
+        #         intrinsics[full_cam_id] = info["cameraMatrix"]
+        # obs_dict["camera_intrinsics"] = intrinsics
 
         return obs_dict

@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 from PIL import Image
 
-from droid.calibration.calibration_utils import *
+# from droid.calibration.calibration_utils import *
 from droid.camera_utils.info import camera_type_to_string_dict
 from droid.camera_utils.wrappers.recorded_multi_camera_wrapper import RecordedMultiCameraWrapper
 from droid.misc.parameters import *
@@ -66,6 +66,7 @@ def collect_trajectory(
 
     # Begin! #
     while True:
+        # start_time = time.time()
         # Collect Miscellaneous Info #
         controller_info = {} if (controller is None) else controller.get_info()
         skip_action = wait_for_controller and (not controller_info["movement_enabled"])
@@ -73,10 +74,6 @@ def collect_trajectory(
 
         # Get Observation #
         obs = env.get_observation()
-        if obs_pointer is not None:
-            obs_pointer.update(obs)
-        obs["controller_info"] = controller_info
-        obs["timestamp"]["skip_action"] = skip_action
 
         # Get Action #
         control_timestamps["policy_start"] = time_ms()
@@ -85,6 +82,16 @@ def collect_trajectory(
         else:
             action = policy.forward(obs)
             controller_action_info = {}
+        
+        # if np.all(action == 0):
+        #     skip_action = True
+        #     controller_info["movement_enabled"] = False
+
+        if obs_pointer is not None:
+            obs_pointer.update(obs)
+        obs["controller_info"] = controller_info
+        obs["timestamp"]["skip_action"] = skip_action
+
 
         # Regularize Control Frequency #
         control_timestamps["sleep_start"] = time_ms()
@@ -123,11 +130,16 @@ def collect_trajectory(
 
         # Close Files And Return #
         if end_traj:
+            print("Trajectory Complete")
             if recording_folderpath:
                 env.camera_reader.stop_recording()
+                print("Recording Stopped")
             if save_filepath:
                 traj_writer.close(metadata=controller_info)
+                print("Trajectory Saved")
             return controller_info
+
+        # print("Frequency: ", 1 / (time.time() - start_time))
 
 
 def calibrate_camera(
@@ -221,7 +233,7 @@ def calibrate_camera(
         start_time = time.time()
         take_picture = (i % image_freq) == 0
 
-        # Collect Observations #
+        # Collect observation #
         if take_picture:
             time.sleep(pause_time)
         state, _ = env.get_state()
@@ -276,7 +288,8 @@ def replay_trajectory(
     env, filepath=None, assert_replayable_keys=["cartesian_position", "gripper_position", "joint_positions"]
 ):
     print("WARNING: STATE 'CLOSENESS' FOR REPLAYABILITY HAS NOT BEEN CALIBRATED")
-    gripper_key = "gripper_velocity" if "velocity" in env.action_space else "gripper_position"
+    # gripper_key = "gripper_velocity" if "velocity" in env.action_space else "gripper_position"
+    gripper_key = "gripper_position"
 
     # Prepare Trajectory Reader #
     traj_reader = TrajectoryReader(filepath, read_images=False)
@@ -304,6 +317,7 @@ def replay_trajectory(
         time.sleep(1 / env.control_hz)
 
         # Get Action In Desired Action Space #
+        # print(env.action_space)
         arm_action = timestep["action"][env.action_space]
         gripper_action = timestep["action"][gripper_key]
         action = np.concatenate([arm_action, [gripper_action]])

@@ -11,7 +11,7 @@ import numpy as np
 from droid.misc.subprocess_utils import run_threaded_command
 
 
-def write_dict_to_hdf5(hdf5_file, data_dict, keys_to_ignore=["image", "depth", "pointcloud"]):
+def write_dict_to_hdf5(hdf5_file, data_dict, keys_to_ignore=["depth", "pointcloud"]):
     for key in data_dict.keys():
         # Pass Over Specified Keys #
         if key in keys_to_ignore:
@@ -66,8 +66,8 @@ class TrajectoryWriter:
         run_threaded_command(self._write_from_queue, args=(hdf5_writer, self._queue_dict["hdf5"]))
 
     def write_timestep(self, timestep):
-        if self._save_images:
-            self._update_video_files(timestep)
+        # if self._save_images:
+        #     self._update_video_files(timestep)
         self._queue_dict["hdf5"].put(timestep)
 
     def _update_metadata(self, metadata):
@@ -83,16 +83,42 @@ class TrajectoryWriter:
             writer(data)
             queue.task_done()
 
+    # def _update_video_files(self, timestep):
+    #     image_dict = timestep["observations"]["image"]
+
+    #     for video_id in image_dict:
+    #         # Get Frame #
+    #         img = image_dict[video_id]
+    #         del image_dict[video_id]
+
+    #         # Create Writer And Buffer #
+    #         if video_id not in self._video_files:
+    #             filename = self.create_video_file(video_id, ".mp4")
+    #             self._video_writers[video_id] = imageio.get_writer(filename, macro_block_size=1)
+    #             run_threaded_command(
+    #                 self._write_from_queue, args=(self._video_writers[video_id].append_data, self._queue_dict[video_id])
+    #             )
+
+    #         # Add Image To Queue #
+    #         self._queue_dict[video_id].put(img)
+
+    #     del timestep["observations"]["image"]
+
     def _update_video_files(self, timestep):
-        image_dict = timestep["observations"]["image"]
+        image_dict = timestep["observation"]["image"]
+
+        # Collect video_ids to delete after the loop
+        video_ids_to_delete = []
 
         for video_id in image_dict:
             # Get Frame #
             img = image_dict[video_id]
-            del image_dict[video_id]
+            
+            # Add video_id to the list for deletion after the loop
+            video_ids_to_delete.append(video_id)
 
             # Create Writer And Buffer #
-            if video_id not in self._video_buffers:
+            if video_id not in self._video_files:
                 filename = self.create_video_file(video_id, ".mp4")
                 self._video_writers[video_id] = imageio.get_writer(filename, macro_block_size=1)
                 run_threaded_command(
@@ -102,7 +128,11 @@ class TrajectoryWriter:
             # Add Image To Queue #
             self._queue_dict[video_id].put(img)
 
-        del timestep["observations"]["image"]
+        # Delete the video_ids after the iteration is complete
+        for video_id in video_ids_to_delete:
+            del image_dict[video_id]
+
+        del timestep["observation"]["image"]
 
     def create_video_file(self, video_id, suffix):
         temp_file = tempfile.NamedTemporaryFile(suffix=suffix)
@@ -124,15 +154,15 @@ class TrajectoryWriter:
         # Save Serialized Videos #
         for video_id in self._video_files:
             # Create Folder #
-            if "videos" not in self._hdf5_file["observations"]:
-                self._hdf5_file["observations"].create_group("videos")
+            if "videos" not in self._hdf5_file["observation"]:
+                self._hdf5_file["observation"].create_group("videos")
 
             # Get Serialized Video #
             self._video_files[video_id].seek(0)
             serialized_video = np.asarray(self._video_files[video_id].read())
 
             # Save Data #
-            self._hdf5_file["observations"]["videos"].create_dataset(video_id, data=serialized_video)
+            self._hdf5_file["observation"]["videos"].create_dataset(video_id, data=serialized_video)
             self._video_files[video_id].close()
 
         # Close File #

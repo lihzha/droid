@@ -34,7 +34,7 @@ def get_hdf5_length(hdf5_file, keys_to_ignore=[]):
 
         if length is None:
             length = curr_length
-        assert curr_length == length
+        assert curr_length == length, key
 
     return length
 
