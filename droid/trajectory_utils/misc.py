@@ -65,9 +65,15 @@ def collect_trajectory(
         env.reset(randomize=randomize_reset)
 
     # Begin
-    print("=== Start teleop!")
+    print("=== Press side button to start teleop...")
+    while True:
+        controller_info = controller.get_info()
+        if controller_info["movement_enabled"]:
+            break
+    print("=== Teleop started!")
     while True:
         # start_time = time.time()
+
         # Collect Miscellaneous Info #
         controller_info = {} if (controller is None) else controller.get_info()
         skip_action = wait_for_controller and (not controller_info["movement_enabled"])
@@ -83,16 +89,11 @@ def collect_trajectory(
         else:
             action = policy.forward(obs)
             controller_action_info = {}
-        
-        # if np.all(action == 0):
-        #     skip_action = True
-        #     controller_info["movement_enabled"] = False
 
         if obs_pointer is not None:
             obs_pointer.update(obs)
         obs["controller_info"] = controller_info
         obs["timestamp"]["skip_action"] = skip_action
-
 
         # Regularize Control Frequency #
         control_timestamps["sleep_start"] = time_ms()

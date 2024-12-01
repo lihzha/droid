@@ -17,8 +17,8 @@ def main(args):
     controller = VRPolicy(ip_address=None, right_controller=True, pos_action_gain=6, rot_action_gain=1)
 
     # Collect all
-    cnt = 0
-    print(f"Collecting {args.total} trajectories...")
+    cnt = args.start
+    print(f"Collecting {args.total} trajectories starting at {cnt}...")
     while cnt < args.total:
         filepath = os.path.join(args.folder, f"{cnt}.h5")
         save_traj = collect_trajectory(
@@ -42,6 +42,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-t", "--total", type=int, default=50)
+    parser.add_argument("-s", "--start", type=int, default=0)
     parser.add_argument("-f", "--folder", type=str, default="/home/lab/guided-data-collection/data/practice_nov30")
     args = parser.parse_args()
     main(args)
