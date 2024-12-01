@@ -64,7 +64,8 @@ def collect_trajectory(
     if reset_robot:
         env.reset(randomize=randomize_reset)
 
-    # Begin! #
+    # Begin
+    print("=== Start teleop!")
     while True:
         # start_time = time.time()
         # Collect Miscellaneous Info #
@@ -137,7 +138,8 @@ def collect_trajectory(
             if save_filepath:
                 traj_writer.close(metadata=controller_info)
                 print("Trajectory Saved")
-            return controller_info
+            key = input("Press d to discard this trial, or any other key to continue...")
+            return not key == "d"
 
         # print("Frequency: ", 1 / (time.time() - start_time))
 
