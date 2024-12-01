@@ -1,10 +1,7 @@
 import h5py
 import cv2
 import numpy as np
-
-import h5py
-import cv2
-import numpy as np
+import argparse
 
 def save_hdf5_images_as_videos(hdf5_path, output_path, fps=30):
     """
@@ -71,9 +68,14 @@ def save_hdf5_images_as_videos(hdf5_path, output_path, fps=30):
         video_writer.release()
         print(f"Saved combined video to {output_path}")
 
-for i in range(1, 5):
-    trajectory_folderpath = "/home/lab/droid/traj_data"
-    h5_filepath = trajectory_folderpath + f"/{i}.h5"
 
-    output_path = f'{i}.mp4'
-    save_hdf5_images_as_videos(h5_filepath, output_path)
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Convert HDF5 files to MP4 videos.")
+    parser.add_argument("-f", "--folder", type=str)
+    parser.add_argument("-n", "--n", nargs="+", type=int)
+    args = parser.parse_args()
+
+    for i in args.n:
+        h5_filepath = f"{args.folder}/{i}.h5"
+        output_path = f"{args.folder}/{i}.mp4"
+        save_hdf5_images_as_videos(h5_filepath, output_path)
